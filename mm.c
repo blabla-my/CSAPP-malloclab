@@ -23,18 +23,18 @@
  * NOTE TO STUDENTS: Before you do anything else, please
  * provide your team information in the following struct.
  ********************************************************/
-/*team_t team = {
-    Team name:
-    "szq",
-    First member's full name:
-    "shao ziqing",
-    First member's email address:
-    "18307130076@fudan.edu.cn",
-    Second member's full name (leave blank if none):
+team_t team = {
+    /* Team name */
+    "Mingyuan Luo",
+    /* First member's full name */
+    "Mingyuan Luo",
+    /* First member's email address */
+    "18300240005@fudan.edu.cn",
+    /* Second member's full name (leave blank if none) */
     "",
-    Second member's email address (leave blank if none):
+    /* Second member's email address (leave blank if none) */
     ""
-};*/
+};
 
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
