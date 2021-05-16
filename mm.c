@@ -143,7 +143,6 @@ static void *coalesce(void * bp){
 static void place(void *bp, size_t asize){
     size_t size = GET_SIZE(HDRP(bp));
     char *ftr = FTRP(bp);
-
     /* determine asize */
     asize = (size-asize < DSIZE) ? size : asize ; 
 
