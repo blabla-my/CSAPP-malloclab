@@ -73,8 +73,6 @@ team_t team = {
 
 
 static void * heap_listp;
-static void * bins[16];
-
 
 /*
  * extend_heap - 
@@ -94,7 +92,7 @@ static void * extend_heap(size_t words){
     PUT(HDRP(bp), PACK(size,0));
     PUT(FTRP(bp), PACK(size,0));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
-
+    //printf("extend heap: next size [%d]\n",GET_SIZE(HDRP(NEXT_BLKP(heap_listp))));
     /* Coalesce if the previous block was free */
     return coalesce(bp);
 }
@@ -104,7 +102,7 @@ static void * extend_heap(size_t words){
  */
 
 static void *coalesce(void * bp){
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
@@ -141,8 +139,11 @@ static void *coalesce(void * bp){
  */
 
 static void place(void *bp, size_t asize){
+    if(GET_ALLOC(HDRP(bp))) return ;
+
     size_t size = GET_SIZE(HDRP(bp));
     char *ftr = FTRP(bp);
+
     /* determine asize */
     asize = (size-asize < DSIZE) ? size : asize ; 
 
@@ -159,6 +160,7 @@ static void place(void *bp, size_t asize){
     }
 }
 
+
 /*
  * find_fit - search a suitable free chunk according to specific strategy
  */
@@ -170,9 +172,11 @@ static void * find_fit(size_t asize){
     * using first fit
     */
     char * bp = NEXT_BLKP(heap_listp) ;
-    for(; GET_SIZE(bp) != 0 && GET_SIZE(bp) < asize ; bp = NEXT_BLKP(bp));
-
-    if( GET_SIZE(bp) >= asize){
+    //printf("[%d] #%d\n",GET_SIZE(bp),GET_ALLOC(bp));
+    for(; GET_SIZE(HDRP(bp)) != 0 && ( GET_ALLOC(HDRP(bp)) || GET_SIZE(HDRP(bp)) < asize ) ; bp = NEXT_BLKP(bp)) {
+    };
+    //printf("[%d] #%d\n",GET_SIZE(HDRP(bp)),GET_ALLOC(HDRP(bp)));
+    if( GET_SIZE(HDRP(bp)) >= asize && !GET_ALLOC(HDRP(bp))){
         return bp;
     }
     return NULL;
@@ -227,7 +231,7 @@ void *mm_malloc(size_t size)
 
     /* No fit found. Get more memory and place the block */
     extendsize = MAX(asize, CHUNKSIZE);
-    if ((bp = extend_heap(extendsize)) == NULL){
+    if ((bp = extend_heap(extendsize / WSIZE)) == NULL){
         return NULL;
     }
     place(bp, asize);
@@ -258,19 +262,13 @@ void *mm_realloc(void *ptr, size_t size)
     newptr = mm_malloc(size);
     if (newptr == NULL)
       return NULL;
-    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+    copySize = GET_SIZE(HDRP(oldptr));
     if (size < copySize)
       copySize = size;
     memcpy(newptr, oldptr, copySize);
     mm_free(oldptr);
     return newptr;
 }
-
-
-
-
-
-
 
 
 
