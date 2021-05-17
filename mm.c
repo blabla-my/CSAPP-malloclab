@@ -66,6 +66,9 @@ team_t team = {
 #define HDRP(bp)        ((char *)(bp) - WSIZE)
 #define FTRP(bp)        ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
+/* judge if a chunk suits a request */
+#define LEGAL(bp,size)  ( !GET_ALLOC(HDRP(bp)) && GET_SIZE(HDRP(bp)) >= (size) )
+
 /* Given block ptr bp, compute address of next and previous blocks */
 #define NEXT_BLKP(bp)   ((char *)(bp) + GET_SIZE(HDRP(bp)))
 #define PREV_BLKP(bp)   ((char *)(bp) - GET_SIZE(HDRP(bp)-WSIZE))
@@ -78,6 +81,9 @@ team_t team = {
 
 static void* head_chunk[4]={NULL,NULL,NULL,NULL};
 static char* heap_listp = (char*)(&head_chunk[2]);
+static char* pre_loc = NULL;
+
+
 /*
  * extend_heap - 
  */
@@ -109,6 +115,11 @@ static void unlink_free_list(void *bp){
         set_next(_prev,_next);
         /* set pointer of _next */
         set_prev(_next,_prev);
+
+        /* update pre_loc */
+        if(pre_loc == bp){
+            pre_loc = _next;   
+        }
     }
 }
 
@@ -218,23 +229,33 @@ static void place(void *bp, size_t asize){
  * find_fit - search a suitable free chunk according to specific strategy
  */
 
-static void * find_fit(size_t asize){
-    /*
-    * a simplest version
-    * search the implicit linklist of chunk from the headlistp
-    * using first fit
-    */
-    static char * bp ; 
-    bp= next(heap_listp) ;
-    //printf("[%d] #%d\n",GET_SIZE(bp),GET_ALLOC(bp));
-    for(; bp != heap_listp && ( GET_ALLOC(HDRP(bp)) || GET_SIZE(HDRP(bp)) < asize ) ; bp = next(bp)) {
-    };
-    //printf("[%d] #%d\n",GET_SIZE(HDRP(bp)),GET_ALLOC(HDRP(bp)));
-    if( bp != heap_listp && GET_SIZE(HDRP(bp)) >= asize && !GET_ALLOC(HDRP(bp))){
-        //printf("find fit [%d] succ.\n",asize);
-        return bp;
+static void * next_fit(size_t asize){
+    char * bp;
+    for(bp = pre_loc ; bp != heap_listp; bp = next(bp)){
+        if(LEGAL(bp,asize)){
+            return bp;
+        }
+    }
+    for(bp = next(heap_listp) ; bp != pre_loc; bp = next(bp)){
+        if(LEGAL(bp,asize)){
+            return bp;
+        }
     }
     return NULL;
+}
+
+static void * first_fit(size_t asize){
+    char * bp;
+    for(bp = next(heap_listp) ; bp != heap_listp ; bp = next(bp)){
+        if(LEGAL(bp,asize)){
+            return bp;
+        }
+    }
+    return NULL;
+}
+
+static void * find_fit(size_t asize){
+    return first_fit(asize);
 }
 
 
@@ -255,6 +276,7 @@ int mm_init(void)
     /* initialize the heap_listp */
     set_next(heap_listp,heap_listp);
     set_prev(heap_listp,heap_listp);
+    pre_loc = heap_listp;
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if(extend_heap(CHUNKSIZE / WSIZE) == NULL){
