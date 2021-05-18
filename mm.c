@@ -203,15 +203,20 @@ static void *coalesce(void * bp){
     return bp;
 }
 
-
-static void split(char* bp, size_t asize){
+void split(void * bp , size_t asize, int alloc){
     size_t size = GET_SIZE(HDRP(bp));
-    char *ftr = FTRP(bp);
+    char * ftr = FTRP(bp);
+    //printf("split request %p[%d] [%d]\n",bp,size,asize);
+
+    /* determine asize */
+    asize = (size - asize <= DSIZE) ? size : asize ;
+
+    /* set the size of new chunk */
+    PUT(HDRP(bp), PACK(asize,alloc));
+    PUT(FTRP(bp), PACK(asize,alloc));
+
+    /* split the left chunk */
     if( size - asize > DSIZE ){
-        /* set the header and footer of the new chunk */
-        PUT(HDRP(bp), PACK(asize,1));
-        PUT(FTRP(bp), PACK(asize,1));
-        /* split */
         size_t left_size = size - asize;
         char * hdr = ftr + WSIZE - left_size ; 
         PUT(hdr, PACK(left_size,0));
@@ -221,6 +226,7 @@ static void split(char* bp, size_t asize){
     }
 }
 
+
 /*
  * place - 
  *
@@ -228,11 +234,8 @@ static void split(char* bp, size_t asize){
 static void place(void *bp, size_t asize){
     if(GET_ALLOC(HDRP(bp))) return ;
 
-    /* unlink the chunk */
     unlink_free_list(bp);
-    
-    /* split the old chunk */
-    split(bp,asize);
+    split(bp,asize,1);
 }
 
 
@@ -346,9 +349,13 @@ void mm_free(void *ptr)
 {
     //printf("mm_free request %p[%d]\n",ptr,GET_SIZE(HDRP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
-
+    
     PUT(HDRP(ptr), PACK(size,0));
     PUT(FTRP(ptr), PACK(size,0));
+    /*if(size>>3 < MAX_LISTS){
+        insert_free_list(ptr);
+        return ;
+    }*/
     coalesce(ptr);
 }
 
@@ -357,6 +364,7 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+    //printf("mm_realloc request %p[%d]\n",ptr,size);
     void *oldptr = ptr;
     void *newptr;
     size_t asize,oldsize;
@@ -367,26 +375,27 @@ void *mm_realloc(void *ptr, size_t size)
 
     /* get size */
     asize = ALIGN(size) + DSIZE;
-    oldsize = GET_SIZE(ptr);
+    oldsize = GET_SIZE(HDRP(ptr));
     
     /* new size <= old size */
     if(asize <= oldsize){
-        split(ptr,asize);
+        split(ptr,asize,1);
         return ptr;
     }
 
     /* new size > old size*/
     char * nblk = NEXT_BLKP(ptr);
     size_t nsize = GET_SIZE(HDRP(nblk));
-
     /* plus next block can fit the request size */
-    if(!GET_ALLOC(HDRP(nblk)) && nsize + oldsize >= asize ){
+    if(!GET_ALLOC(HDRP(nblk)) && oldsize + nsize >= asize ){
+        size = nsize + oldsize; 
         /* coalesce two chunk */
         unlink_free_list(nblk);
-        PUT(HDRP(ptr),PACK(oldsize + nsize, 1));
-        PUT(FTRP(ptr),PACK(oldsize + nsize, 1));
+        /* set the size */
+        PUT(HDRP(ptr),PACK(size, 1));
+        PUT(FTRP(ptr),PACK(size, 1));
         /* if neccessary, split */
-        split(ptr,asize);
+        split(ptr, asize, 1);
         return ptr;
     }
 
@@ -394,7 +403,7 @@ void *mm_realloc(void *ptr, size_t size)
     newptr = mm_malloc(size);
     if (newptr == NULL)
       return NULL;
-    memcpy(newptr, oldptr, oldsize);
+    memcpy(newptr, oldptr, oldsize-DSIZE);
     mm_free(oldptr);
     return newptr;
 }
