@@ -203,7 +203,7 @@ static void *coalesce(void * bp){
     return bp;
 }
 
-void split(void * bp , size_t asize, int alloc){
+static void split(void * bp , size_t asize, int alloc){
     size_t size = GET_SIZE(HDRP(bp));
     char * ftr = FTRP(bp);
     //printf("split request %p[%d] [%d]\n",bp,size,asize);
@@ -222,7 +222,7 @@ void split(void * bp , size_t asize, int alloc){
         PUT(hdr, PACK(left_size,0));
         PUT(ftr, PACK(left_size,0));
         /* insert the left chunk to the free list */
-        insert_free_list((char*)(hdr+WSIZE));
+        coalesce((char*)(hdr+WSIZE));
     }
 }
 
