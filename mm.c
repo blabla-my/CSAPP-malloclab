@@ -385,18 +385,56 @@ void *mm_realloc(void *ptr, size_t size)
 
     /* new size > old size*/
     char * nblk = NEXT_BLKP(ptr);
+    char * pblk = PREV_BLKP(ptr);
     size_t nsize = GET_SIZE(HDRP(nblk));
+    size_t psize = GET_SIZE(HDRP(pblk));
+
     /* plus next block can fit the request size */
-    if(!GET_ALLOC(HDRP(nblk)) && oldsize + nsize >= asize ){
-        size = nsize + oldsize; 
-        /* coalesce two chunk */
-        unlink_free_list(nblk);
-        /* set the size */
-        PUT(HDRP(ptr),PACK(size, 1));
-        PUT(FTRP(ptr),PACK(size, 1));
-        /* if neccessary, split */
-        split(ptr, asize, 1);
-        return ptr;
+    if(!GET_ALLOC(HDRP(nblk)) && GET_ALLOC(HDRP(pblk))){
+        size = nsize + oldsize;
+        if(size >= asize){ 
+            /* coalesce two chunk */
+            unlink_free_list(nblk);
+            /* set the size */
+            PUT(HDRP(ptr),PACK(size, 1));
+            PUT(FTRP(ptr),PACK(size, 1));
+            /* if neccessary, split */
+            split(ptr, asize, 1);
+            return ptr;
+        }
+    }
+    else 
+    if(GET_ALLOC(HDRP(nblk)) && !GET_ALLOC(HDRP(pblk))){
+        size = psize + oldsize ;
+        if(size >= asize){
+            /* coalesce two chunk */
+            unlink_free_list(pblk);
+            /* set the size */
+            PUT(HDRP(pblk),PACK(size, 1));
+            PUT(FTRP(pblk),PACK(size, 1));
+            /* move the data */
+            memmove(pblk,ptr,oldsize-DSIZE);
+            /* if neccessary, split */
+            split(pblk, asize, 1);
+            return pblk;
+        }
+    }
+    else
+    if(!GET_ALLOC(HDRP(nblk)) && !GET_ALLOC(HDRP(pblk))){
+        size = psize + oldsize + nsize;
+        if(size >= asize){
+            /* coalesce two chunk */
+            unlink_free_list(pblk);
+            unlink_free_list(nblk);
+            /* set the size */
+            PUT(HDRP(pblk),PACK(size, 1));
+            PUT(FTRP(pblk),PACK(size, 1));
+            /* move the data */
+            memmove(pblk,ptr,oldsize-DSIZE);
+            /* if neccessary, split */
+            split(pblk, asize, 1);
+            return pblk;
+        }
     }
 
     /* need to allocate new block to fit the request size */
