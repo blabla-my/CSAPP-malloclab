@@ -99,13 +99,13 @@ static char* heap_listp[MAX_LISTS];
  */
 static void *coalesce(void * bp);
 static int Idx(size_t asize){
-    if(asize - DSIZE < MAX_FASTBIN_CHUNK){
-        return (asize - DSIZE) >> 3;
+    if(asize < MAX_FASTBIN_CHUNK){
+        return (asize) >> 3;
     }
     int i;
     size_t upbound = MAX_FASTBIN_CHUNK ;
     for(i=MAX_FASTBINS;i<MAX_LISTS;i++){
-        if(asize - DSIZE <= upbound){
+        if(asize <= upbound){
             return i;
         }
         upbound <<= 1;
@@ -251,11 +251,28 @@ static void split(void * bp , size_t asize, int alloc){
  * place - 
  *
  */
-static void place(void *bp, size_t asize){
-    if(GET_ALLOC(HDRP(bp))) return ;
-
+static char* place(void *bp, size_t asize){
+    if(GET_ALLOC(HDRP(bp))) return NULL;
+    //printf("place request %p[%d][%d]\n",bp,GET_SIZE(HDRP(bp)),asize);
     unlink_free_list(bp);
-    split(bp,asize,1);
+    
+    size_t size = GET_SIZE(HDRP(bp));
+    
+    if(size - asize >= 128){
+        PUT(HDRP(bp),PACK(size-asize,0));
+        PUT(FTRP(bp),PACK(size-asize,0));
+        char * np = NEXT_BLKP(bp);
+        PUT(HDRP(np),PACK(asize,1));
+        PUT(FTRP(np),PACK(asize,1));
+        coalesce(bp);
+        //printf("split later of the chunk, %p[%d] %p[%d]\n",bp,GET_SIZE(HDRP(bp)),np,GET_SIZE(HDRP(np)));
+        return np;
+    }
+    
+    else
+        split(bp,asize,1);
+    //printf("split former of the chunk, %p[%d]\n",bp,GET_SIZE(HDRP(bp)));
+    return bp;
 }
 
 
@@ -295,7 +312,7 @@ static void * find_fit(size_t asize){
         int i=idx;
         char * fit;
         for(; i<MAX_FASTBINS; i++){
-            if( next(heap_listp[i]) != heap_listp[i] ){
+            if( next(heap_listp[i]) != heap_listp[i] && LEGAL(next(heap_listp[i]),asize)){
                 return next(heap_listp[i]);
             }
         }
@@ -358,7 +375,7 @@ void *mm_malloc(size_t size)
     //printf("alloc request [%d]\n",asize);
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL){
-        place(bp,asize);
+        bp = place(bp,asize);
         return bp;
     }
     /* No fit found. Get more memory and place the block */
@@ -366,7 +383,7 @@ void *mm_malloc(size_t size)
     if ((bp = extend_heap(extendsize / WSIZE)) == NULL){
         return NULL;
     }
-    place(bp, asize);
+    bp = place(bp, asize);
     //printf("alloc [%d] down\n",asize);
     return bp;
 }
