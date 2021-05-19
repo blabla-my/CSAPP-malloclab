@@ -80,8 +80,9 @@ team_t team = {
 #define set_prev(bp,p)  (PUT( (char*)(bp) + 4,(unsigned int)(p) ))
 
 /* structure and data of lists */
-#define MAX_LISTS 64
-#define IDX(bp) ((GET_SIZE(HDRP(bp))-WSIZE) >> 3)  
+#define MAX_LISTS 32
+#define MAX_FASTBINS 16
+#define MAX_FASTBIN_CHUNK 128 
 typedef struct {
     unsigned int hdr;
     char * next;
@@ -97,18 +98,37 @@ static char* heap_listp[MAX_LISTS];
  * extend_heap - 
  */
 static void *coalesce(void * bp);
+static int Idx(size_t asize){
+    if(asize - DSIZE < MAX_FASTBIN_CHUNK){
+        return (asize - DSIZE) >> 3;
+    }
+    int i;
+    size_t upbound = MAX_FASTBIN_CHUNK ;
+    for(i=MAX_FASTBINS;i<MAX_LISTS;i++){
+        if(asize - DSIZE <= upbound){
+            return i;
+        }
+        upbound <<= 1;
+    }
+    return 0;
+} 
 
 static void insert_free_list(void * bp){
     if(bp){
-        int idx = IDX(bp) < MAX_LISTS ? IDX(bp) : 0 ;
+        size_t size = GET_SIZE(HDRP(bp));
+        int idx = Idx(size) ;
+        char *listp = heap_listp[idx];
         //printf("insert request %p[%d], at idx(%d)\n",bp,GET_SIZE(HDRP(bp)),idx);
         /* insert the block to heap_listp[idx] */
-        char * _next = next(heap_listp[idx]);
-        /* set pointer of head */
-        set_next(heap_listp[idx],bp);
+
+        //for(; listp != heap_listp[idx] && GET_SIZE(HDRP(listp)) > size; listp = next(listp));
+        
+        char * _next = next(listp);
+        /* set pointer of listp */
+        set_next(listp,bp);
         /* set pointer of bp */
         set_next(bp,_next);
-        set_prev(bp,heap_listp[idx]);
+        set_prev(bp,listp);
         /* set pointer of _next */
         set_prev(_next,bp);
     }
@@ -141,7 +161,6 @@ static void * extend_heap(size_t words){
     /* Allocate an even number of words to maintain alignment */
     size = words % 2 ? (words + 1)*WSIZE : words*WSIZE ;
     if((long) (bp = mem_sbrk(size)) == -1) {
-        //printf("?\n");
         return NULL;
     }
 
@@ -149,6 +168,7 @@ static void * extend_heap(size_t words){
     PUT(HDRP(bp), PACK(size,0));
     PUT(FTRP(bp), PACK(size,0));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
+
     /* Coalesce if the previous/next block was free */
     bp = coalesce(bp);
     return bp;
@@ -193,7 +213,7 @@ static void *coalesce(void * bp){
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size,0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size,0));
-        /* unlink next chunk of implicit link on link */
+        /* unlink next chunk */
         unlink_free_list(NEXT_BLKP(bp));
         unlink_free_list(PREV_BLKP(bp));
         bp = PREV_BLKP(bp);
@@ -258,9 +278,9 @@ static void * next_fit(size_t asize){
     return NULL;
 }
 */
-static void * first_fit(size_t asize){
+static void * first_fit(char *listp,size_t asize){
     char * bp;
-    for(bp = next(heap_listp[0]) ; bp != heap_listp[0] ; bp = next(bp)){
+    for(bp = next(listp) ; bp != listp ; bp = next(bp)){
         if(LEGAL(bp,asize)){
             return bp;
         }
@@ -269,13 +289,22 @@ static void * first_fit(size_t asize){
 }
 
 static void * find_fit(size_t asize){
-    int idx = (asize >>3) < MAX_LISTS ? (asize >> 3) : 0;
+    int idx = Idx(asize);
+    
     if(idx){
-        if( next(heap_listp[idx]) != heap_listp[idx] ){
-            return next(heap_listp[idx]);
+        int i=idx;
+        char * fit;
+        for(; i<MAX_FASTBINS; i++){
+            if( next(heap_listp[i]) != heap_listp[i] ){
+                return next(heap_listp[i]);
+            }
+        }
+        for(; i<MAX_LISTS; i++){
+            fit = first_fit(heap_listp[i],asize);
+            if(fit) return fit;
         }
     }
-    return first_fit(asize);
+    return first_fit(heap_listp[0],asize);
 }
 
 
@@ -403,6 +432,7 @@ void *mm_realloc(void *ptr, size_t size)
             return ptr;
         }
     }
+    
     else 
     if(GET_ALLOC(HDRP(nblk)) && !GET_ALLOC(HDRP(pblk))){
         size = psize + oldsize ;
@@ -436,6 +466,7 @@ void *mm_realloc(void *ptr, size_t size)
             return pblk;
         }
     }
+    
 
     /* need to allocate new block to fit the request size */
     newptr = mm_malloc(size);
