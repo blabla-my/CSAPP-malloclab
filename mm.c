@@ -456,7 +456,6 @@ void *mm_realloc(void *ptr, size_t size)
         }
     }
     
-
     /* need to allocate new block to fit the request size */
     newptr = mm_malloc(asize);
     if (newptr == NULL)
