@@ -246,6 +246,15 @@ static void split(void * bp , size_t asize, int alloc){
     }
 }
 
+static void split_later(void *bp, size_t asize, int alloc){
+    size_t size = GET_SIZE(HDRP(bp));
+    PUT(HDRP(bp), PACK(size - asize,0));
+    PUT(FTRP(bp), PACK(size - asize,0));
+    char * nblk = NEXT_BLKP(bp);
+    PUT(HDRP(nblk), PACK(asize,alloc));
+    PUT(FTRP(nblk), PACK(asize,alloc));
+    coalesce(bp);
+}
 
 /*
  * place - 
@@ -258,21 +267,17 @@ static char* place(void *bp, size_t asize){
     
     size_t size = GET_SIZE(HDRP(bp));
     
-    if(size - asize >= 128){
-        PUT(HDRP(bp),PACK(size-asize,0));
-        PUT(FTRP(bp),PACK(size-asize,0));
-        char * np = NEXT_BLKP(bp);
-        PUT(HDRP(np),PACK(asize,1));
-        PUT(FTRP(np),PACK(asize,1));
-        coalesce(bp);
+    if(size - asize >= 120){
+        split_later(bp,asize,1);
         //printf("split later of the chunk, %p[%d] %p[%d]\n",bp,GET_SIZE(HDRP(bp)),np,GET_SIZE(HDRP(np)));
-        return np;
+        return NEXT_BLKP(bp);
     }
     
-    else
+    else{
         split(bp,asize,1);
-    //printf("split former of the chunk, %p[%d]\n",bp,GET_SIZE(HDRP(bp)));
-    return bp;
+        //printf("split former of the chunk, %p[%d]\n",bp,GET_SIZE(HDRP(bp)));
+        return bp;
+    }
 }
 
 
@@ -486,7 +491,7 @@ void *mm_realloc(void *ptr, size_t size)
     
 
     /* need to allocate new block to fit the request size */
-    newptr = mm_malloc(size);
+    newptr = mm_malloc(asize);
     if (newptr == NULL)
       return NULL;
     memcpy(newptr, oldptr, oldsize-DSIZE);
