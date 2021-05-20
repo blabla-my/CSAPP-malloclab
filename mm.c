@@ -267,7 +267,7 @@ static char* place(void *bp, size_t asize){
     
     size_t size = GET_SIZE(HDRP(bp));
     
-    if(size - asize >= 120){
+    if(size - asize >= 144){
         split_later(bp,asize,1);
         //printf("split later of the chunk, %p[%d] %p[%d]\n",bp,GET_SIZE(HDRP(bp)),np,GET_SIZE(HDRP(np)));
         return NEXT_BLKP(bp);
