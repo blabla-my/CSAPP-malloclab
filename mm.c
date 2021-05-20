@@ -40,15 +40,12 @@ team_t team = {
 
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
-
-
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
 /* Basic constants and macros */
 #define WSIZE 4
 #define DSIZE 8
 #define CHUNKSIZE (1<<12)
-
 #define MAX(x,y) ((x) > (y)? (x) : (y))
 
 /* Pack a size and allocated bit into a word */
@@ -92,7 +89,7 @@ typedef struct {
 
 static head_chunk head_chunks[MAX_LISTS];
 static char* heap_listp[MAX_LISTS];
-//static char* pre_loc[MAX_LISTS];
+
 
 /*
  * extend_heap - 
