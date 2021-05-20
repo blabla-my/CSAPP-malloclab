@@ -267,7 +267,7 @@ static char* place(void *bp, size_t asize){
     
     size_t size = GET_SIZE(HDRP(bp));
     
-    if(size - asize >= 144){
+    if(asize > 96 && size - asize >= 144){
         split_later(bp,asize,1);
         //printf("split later of the chunk, %p[%d] %p[%d]\n",bp,GET_SIZE(HDRP(bp)),np,GET_SIZE(HDRP(np)));
         return NEXT_BLKP(bp);
@@ -354,7 +354,7 @@ int mm_init(void)
     }
     //printf("heap_listp init down.\n");
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if(extend_heap(CHUNKSIZE / WSIZE) == NULL){
+    if(extend_heap(2*DSIZE / WSIZE) == NULL){
         return -1;
     }
     //printf("mem_init down.\n");
@@ -385,6 +385,7 @@ void *mm_malloc(size_t size)
     }
     /* No fit found. Get more memory and place the block */
     extendsize = MAX(asize, CHUNKSIZE);
+    //extendsize = asize;
     if ((bp = extend_heap(extendsize / WSIZE)) == NULL){
         return NULL;
     }
