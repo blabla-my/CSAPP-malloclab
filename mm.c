@@ -81,8 +81,8 @@ team_t team = {
 
 /* structure and data of lists */
 #define MAX_LISTS 32
-#define MAX_FASTBINS 16
-#define MAX_FASTBIN_CHUNK 128 
+#define MAX_FASTBINS 15
+#define MAX_FASTBIN_CHUNK 120 
 typedef struct {
     unsigned int hdr;
     char * next;
@@ -118,11 +118,8 @@ static void insert_free_list(void * bp){
         size_t size = GET_SIZE(HDRP(bp));
         int idx = Idx(size) ;
         char *listp = heap_listp[idx];
-        //printf("insert request %p[%d], at idx(%d)\n",bp,GET_SIZE(HDRP(bp)),idx);
-        /* insert the block to heap_listp[idx] */
 
-        //for(; listp != heap_listp[idx] && GET_SIZE(HDRP(listp)) > size; listp = next(listp));
-        
+        /* insert the block to heap_listp[idx] */        
         char * _next = next(listp);
         /* set pointer of listp */
         set_next(listp,bp);
@@ -136,7 +133,6 @@ static void insert_free_list(void * bp){
 
 static void unlink_free_list(void *bp){
     if(bp){
-        //printf("unlink request %p[%d]\n",bp,GET_SIZE(HDRP(bp)));
         char *_prev,*_next;
         _prev = prev(bp);
         _next = next(bp);
@@ -144,13 +140,6 @@ static void unlink_free_list(void *bp){
         set_next(_prev,_next);
         /* set pointer of _next */
         set_prev(_next,_prev);
-
-        /* update pre_loc */
-        /*
-        if(pre_loc == bp){
-            pre_loc = _next;   
-        }
-        */
     }
 }
 
@@ -262,21 +251,23 @@ static void split_later(void *bp, size_t asize, int alloc){
  */
 static char* place(void *bp, size_t asize){
     if(GET_ALLOC(HDRP(bp))) return NULL;
-    //printf("place request %p[%d][%d]\n",bp,GET_SIZE(HDRP(bp)),asize);
     unlink_free_list(bp);
     
     size_t size = GET_SIZE(HDRP(bp));
     
-    if(asize > 96 && size - asize >= 144){
-        split_later(bp,asize,1);
-        //printf("split later of the chunk, %p[%d] %p[%d]\n",bp,GET_SIZE(HDRP(bp)),np,GET_SIZE(HDRP(np)));
-        return NEXT_BLKP(bp);
+    if(size - asize >= 144){
+        if( asize < 456 && asize != 120){
+            split_later(bp,asize,1);
+            return NEXT_BLKP(bp);
+        }
+        else{
+            split(bp,asize,1);
+            return bp;
+        }
     }
-    
     else{
-        split(bp,asize,1);
-        //printf("split former of the chunk, %p[%d]\n",bp,GET_SIZE(HDRP(bp)));
-        return bp;
+            split(bp,asize,1);
+            return bp;
     }
 }
 
@@ -284,22 +275,6 @@ static char* place(void *bp, size_t asize){
 /*
  * find_fit - search a suitable free chunk according to specific strategy
  */
-/*
-static void * next_fit(size_t asize){
-    char * bp;
-    for(bp = pre_loc ; bp != heap_listp; bp = next(bp)){
-        if(LEGAL(bp,asize)){
-            return bp;
-        }
-    }
-    for(bp = next(heap_listp) ; bp != pre_loc; bp = next(bp)){
-        if(LEGAL(bp,asize)){
-            return bp;
-        }
-    }
-    return NULL;
-}
-*/
 static void * first_fit(char *listp,size_t asize){
     char * bp;
     for(bp = next(listp) ; bp != listp ; bp = next(bp)){
@@ -352,12 +327,10 @@ int mm_init(void)
         set_next(heap_listp[i],heap_listp[i]);
         set_prev(heap_listp[i],heap_listp[i]);
     }
-    //printf("heap_listp init down.\n");
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if(extend_heap(2*DSIZE / WSIZE) == NULL){
         return -1;
     }
-    //printf("mem_init down.\n");
     return 0;
 }
 
@@ -377,7 +350,6 @@ void *mm_malloc(size_t size)
 
     /* Adjust block size to include overhead and alignment reqs */
     asize = ALIGN(size) + DSIZE;
-    //printf("alloc request [%d]\n",asize);
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL){
         bp = place(bp,asize);
@@ -390,7 +362,6 @@ void *mm_malloc(size_t size)
         return NULL;
     }
     bp = place(bp, asize);
-    //printf("alloc [%d] down\n",asize);
     return bp;
 }
 
@@ -399,15 +370,11 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
-    //printf("mm_free request %p[%d]\n",ptr,GET_SIZE(HDRP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
     
     PUT(HDRP(ptr), PACK(size,0));
     PUT(FTRP(ptr), PACK(size,0));
-    /*if(size>>3 < MAX_LISTS){
-        insert_free_list(ptr);
-        return ;
-    }*/
+
     coalesce(ptr);
 }
 
@@ -416,7 +383,6 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    //printf("mm_realloc request %p[%d]\n",ptr,size);
     void *oldptr = ptr;
     void *newptr;
     size_t asize,oldsize;
